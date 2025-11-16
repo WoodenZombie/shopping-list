@@ -11,7 +11,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/lists" replace />} />
           <Route path="/lists" element={<ShoppingListsPage />} />
-          <Route path="/list/:id" element={<ShoppingListDetail />} />
+          <Route path="/shopping-list/:id" element={<ShoppingListDetail />} />
         </Routes>
       </div>
     </Router>

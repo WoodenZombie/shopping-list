@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Edit2 } from 'lucide-react';
 import HeaderBar from './components/HeaderBar';
@@ -7,61 +7,71 @@ import MembersPanel from './components/MembersPanel';
 import ItemsPanel from './components/ItemsPanel';
 import OwnerBadge from './components/OwnerBadge';
 
-// Mock data for a shopping list - stored as constant at route level
-const INITIAL_SHOPPING_LIST = {
-  id: '1',
-  name: 'Weekly Groceries',
-  owner: {
+// Default shopping lists - shared with ShoppingListsPage
+// This should match the defaultLists in ShoppingListsPage.js
+const defaultLists = [
+  {
     id: '1',
-    name: 'John Doe',
-    email: 'john@example.com'
+    name: 'Weekly Groceries',
+    owner: 'user1',
+    members: [
+      { id: '2', name: 'Jane Smith' },
+      { id: '3', name: 'Bob Johnson' }
+    ],
+    items: [
+      { id: '1', name: 'Milk', resolved: false },
+      { id: '2', name: 'Bread', resolved: false },
+      { id: '3', name: 'Eggs', resolved: true }
+    ],
+    archived: false
   },
-  members: [
-    {
-      id: '2',
-      name: 'Jane Smith',
-      email: 'jane@example.com'
-    },
-    {
-      id: '3',
-      name: 'Bob Johnson',
-      email: 'bob@example.com'
-    }
-  ],
-  items: [
-    {
-      id: '1',
-      name: 'Milk',
-      resolved: false
-    },
-    {
-      id: '2',
-      name: 'Bread',
-      resolved: false
-    },
-    {
-      id: '3',
-      name: 'Eggs',
-      resolved: true
-    },
-    {
-      id: '4',
-      name: 'Butter',
-      resolved: false
-    },
-    {
-      id: '5',
-      name: 'Cheese',
-      resolved: true
-    }
-  ]
-};
+  {
+    id: '2',
+    name: 'Party Supplies',
+    owner: 'user1',
+    members: [
+      { id: '4', name: 'Alice Brown' }
+    ],
+    items: [
+      { id: '4', name: 'Balloons', resolved: false }
+    ],
+    archived: false
+  },
+  {
+    id: '3',
+    name: 'Old List',
+    owner: 'user1',
+    members: [],
+    items: [],
+    archived: true
+  }
+];
 
 // Current user - for demonstration
 const CURRENT_USER = {
-  id: '1',
+  id: 'user1',
   name: 'John Doe',
   email: 'john@example.com'
+};
+
+// Helper function to transform list data structure (owner as string) to component format (owner as object)
+const transformListData = (list) => {
+  if (!list) return null;
+  
+  // If owner is already an object, return as is
+  if (typeof list.owner === 'object' && list.owner !== null) {
+    return list;
+  }
+  
+  // Transform owner from string ID to object
+  return {
+    ...list,
+    owner: {
+      id: list.owner || CURRENT_USER.id,
+      name: CURRENT_USER.name,
+      email: CURRENT_USER.email
+    }
+  };
 };
 
 function ShoppingListDetail({
@@ -82,31 +92,136 @@ function ShoppingListDetail({
   const { id: routeId } = useParams();
   const navigate = useNavigate();
   
-  // Use props if provided, otherwise use local state with mock data
-  const [localState, setLocalState] = useState(INITIAL_SHOPPING_LIST);
+  // State management
+  const [localState, setLocalState] = useState(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [localShowResolved, setLocalShowResolved] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  // Function to load list data - memoized with useCallback
+  const loadListData = useCallback(() => {
+    if (listId || routeId) {
+      const targetId = listId || routeId;
+      
+      // Try to get from localStorage first (in case lists were updated)
+      const storedLists = localStorage.getItem('shoppingLists');
+      let allLists = defaultLists;
+      
+      if (storedLists) {
+        try {
+          const parsed = JSON.parse(storedLists);
+          if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+            allLists = parsed;
+          }
+        } catch (e) {
+          console.error('Failed to parse stored lists:', e);
+        }
+      }
+      
+      // Find the list by ID
+      const foundList = allLists.find(list => list.id === targetId);
+      
+      if (foundList) {
+        const transformedList = transformListData(foundList);
+        setLocalState(transformedList);
+        setIsLoading(false);
+      } else {
+        // List not found, redirect to lists page
+        navigate('/lists');
+      }
+    }
+  }, [listId, routeId, navigate]);
+
+  // Load list data based on route parameter
+  useEffect(() => {
+    setIsLoading(true);
+    loadListData();
+  }, [loadListData]);
   
   // Determine if we're using props or local state
   const isControlled = listId !== undefined;
   
   // Get values
-  const currentListId = listId || routeId || localState.id;
-  const currentListName = listName || localState.name;
-  const currentIsOwner = isOwner !== undefined ? isOwner : (localState.owner.id === CURRENT_USER.id);
-  const currentMembers = members || [
+  const currentListId = listId || routeId;
+  const currentListName = listName || (localState?.name || '');
+  const currentIsOwner = isOwner !== undefined 
+    ? isOwner 
+    : (localState?.owner?.id === CURRENT_USER.id || localState?.owner === CURRENT_USER.id);
+  const currentMembers = members || (localState ? [
     { ...localState.owner, isOwner: true },
     ...localState.members.map(m => ({ ...m, isOwner: false }))
-  ];
-  const currentItems = items || localState.items;
+  ] : []);
+  const currentItems = items || (localState?.items || []);
   const currentShowResolved = showResolved !== undefined ? showResolved : localShowResolved;
+  
+  // Helper function to update stored list in localStorage
+  const updateStoredList = (updatedList) => {
+    try {
+      const storedLists = localStorage.getItem('shoppingLists');
+      let allLists = storedLists ? JSON.parse(storedLists) : defaultLists;
+      
+      const index = allLists.findIndex(list => list.id === updatedList.id);
+      
+      // Clean members array - remove isOwner and email if they exist, keep only id and name
+      const cleanedMembers = (updatedList.members || []).map(member => {
+        // Filter out the owner from members (owner is stored separately)
+        if (member.isOwner) {
+          return null; // Skip owner in members array
+        }
+        return {
+          id: member.id,
+          name: member.name
+          // Don't include email or isOwner in storage
+        };
+      }).filter(m => m !== null); // Remove null entries
+      
+      // Transform back to storage format (owner as string, preserve all properties)
+      const storageList = {
+        id: updatedList.id,
+        name: updatedList.name,
+        owner: typeof updatedList.owner === 'object' && updatedList.owner !== null 
+          ? updatedList.owner.id 
+          : updatedList.owner,
+        members: cleanedMembers,
+        items: (updatedList.items || []).map(item => ({
+          id: item.id,
+          name: item.name,
+          resolved: item.resolved !== undefined ? item.resolved : false
+        })),
+        archived: updatedList.archived !== undefined ? updatedList.archived : false
+      };
+      
+      if (index !== -1) {
+        // Update existing list
+        allLists[index] = storageList;
+      } else {
+        // Add new list if it doesn't exist
+        allLists.push(storageList);
+      }
+      
+      localStorage.setItem('shoppingLists', JSON.stringify(allLists));
+    } catch (e) {
+      console.error('Failed to update stored list:', e);
+    }
+  };
+
+  // Show loading state
+  if (isLoading || !localState) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8 px-4 flex items-center justify-center">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    );
+  }
 
   // Handlers
   const handleRenameList = (newName) => {
     if (onRenameList) {
       onRenameList(newName);
     } else {
-      setLocalState({ ...localState, name: newName });
+      const updatedList = { ...localState, name: newName };
+      setLocalState(updatedList);
+      updateStoredList(updatedList);
     }
     setIsEditingName(false);
   };
@@ -116,7 +231,9 @@ function ShoppingListDetail({
     if (onRenameList) {
       onRenameList(newName);
     } else {
-      setLocalState({ ...localState, name: newName });
+      const updatedList = { ...localState, name: newName };
+      setLocalState(updatedList);
+      updateStoredList(updatedList);
     }
   };
 
@@ -130,10 +247,12 @@ function ShoppingListDetail({
         email: email,
         isOwner: false
       };
-      setLocalState({
+      const updatedList = {
         ...localState,
         members: [...localState.members, newMember]
-      });
+      };
+      setLocalState(updatedList);
+      updateStoredList(updatedList);
     }
   };
 
@@ -141,10 +260,12 @@ function ShoppingListDetail({
     if (onRemoveMember) {
       onRemoveMember(memberId);
     } else {
-      setLocalState({
+      const updatedList = {
         ...localState,
         members: localState.members.filter(m => m.id !== memberId)
-      });
+      };
+      setLocalState(updatedList);
+      updateStoredList(updatedList);
     }
   };
 
@@ -165,10 +286,14 @@ function ShoppingListDetail({
         name: itemName,
         resolved: false
       };
-      setLocalState({
+      const updatedList = {
         ...localState,
         items: [...localState.items, newItem]
-      });
+      };
+      setLocalState(updatedList);
+      
+      // Update localStorage to persist changes
+      updateStoredList(updatedList);
     }
   };
 
@@ -176,10 +301,12 @@ function ShoppingListDetail({
     if (onRemoveItem) {
       onRemoveItem(itemId);
     } else {
-      setLocalState({
+      const updatedList = {
         ...localState,
         items: localState.items.filter(item => item.id !== itemId)
-      });
+      };
+      setLocalState(updatedList);
+      updateStoredList(updatedList);
     }
   };
 
@@ -189,12 +316,14 @@ function ShoppingListDetail({
       // If parent controls items, we need a different handler
       // For now, handle locally
     }
-    setLocalState({
+    const updatedList = {
       ...localState,
       items: (currentItems || localState.items).map(item =>
         item.id === itemId ? { ...item, resolved: !item.resolved } : item
       )
-    });
+    };
+    setLocalState(updatedList);
+    updateStoredList(updatedList);
   };
 
   const handleToggleShowResolved = () => {

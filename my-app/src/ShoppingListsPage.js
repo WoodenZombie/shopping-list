@@ -1,17 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import HeaderBar from './components/HeaderBar';
-import { Plus, Trash2, Archive } from 'lucide-react';
+import { Plus, Trash2, Filter } from 'lucide-react';
 
-// Mock data for shopping lists
-const INITIAL_LISTS = [
+// Default shopping lists - stored as constant at route level
+const defaultLists = [
   {
     id: '1',
     name: 'Weekly Groceries',
-    owner: {
-      id: '1',
-      name: 'John Doe'
-    },
+    owner: 'user1',
     members: [
       { id: '2', name: 'Jane Smith' },
       { id: '3', name: 'Bob Johnson' }
@@ -26,10 +23,7 @@ const INITIAL_LISTS = [
   {
     id: '2',
     name: 'Party Supplies',
-    owner: {
-      id: '1',
-      name: 'John Doe'
-    },
+    owner: 'user1',
     members: [
       { id: '4', name: 'Alice Brown' }
     ],
@@ -41,10 +35,7 @@ const INITIAL_LISTS = [
   {
     id: '3',
     name: 'Old List',
-    owner: {
-      id: '1',
-      name: 'John Doe'
-    },
+    owner: 'user1',
     members: [],
     items: [],
     archived: true
@@ -52,22 +43,23 @@ const INITIAL_LISTS = [
 ];
 
 const CURRENT_USER = {
-  id: '1',
+  id: 'user1',
   name: 'John Doe'
 };
 
-function ShowArchivedToggle({ isArchivedView, onToggle }) {
+// Filter component - Show only active vs Show all
+function FilterToggle({ showAll, onToggle }) {
   return (
     <button
       onClick={onToggle}
-      className={`px-4 py-2 rounded-lg transition-colors font-medium ${
-        isArchivedView
+      className={`px-4 py-2 rounded-lg transition-colors font-medium flex items-center gap-2 ${
+        showAll
           ? 'bg-blue-600 text-white'
           : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
       }`}
     >
-      <Archive size={18} className="inline mr-2" />
-      {isArchivedView ? 'Hide Archived' : 'Show Archived'}
+      <Filter size={18} />
+      {showAll ? 'Show All' : 'Show Only Active'}
     </button>
   );
 }
@@ -84,8 +76,9 @@ function CreateListButton({ label = 'Create New List', onClick }) {
   );
 }
 
-function CreateListModal({ isOpen, listName, onClose, onCreate }) {
-  const [name, setName] = useState(listName || '');
+// Modal for creating a new shopping list
+function CreateListModal({ isOpen, onClose, onCreate }) {
+  const [name, setName] = useState('');
 
   if (!isOpen) return null;
 
@@ -97,14 +90,19 @@ function CreateListModal({ isOpen, listName, onClose, onCreate }) {
     }
   };
 
+  const handleClose = () => {
+    setName('');
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">Create New List</h2>
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Create New Shopping List</h2>
         
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            List Name
+            Shopping List Name <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
@@ -119,14 +117,15 @@ function CreateListModal({ isOpen, listName, onClose, onCreate }) {
 
         <div className="flex gap-3 justify-end">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
           >
             Cancel
           </button>
           <button
             onClick={handleCreate}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            disabled={!name.trim()}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Create
           </button>
@@ -136,7 +135,41 @@ function CreateListModal({ isOpen, listName, onClose, onCreate }) {
   );
 }
 
-function ShoppingListCard({ list, isOwner, onSelectList, onDeleteList }) {
+// Confirmation dialog for deleting a shopping list
+function DeleteConfirmationModal({ isOpen, listName, onClose, onConfirm }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Delete Shopping List</h2>
+        
+        <p className="text-gray-600 mb-6">
+          Are you sure you want to delete <span className="font-semibold">"{listName}"</span>? 
+          This action cannot be undone.
+        </p>
+
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Shopping list tile component
+function ShoppingListCard({ list, isOwner, onSelectList, onDeleteClick }) {
   const totalItems = list.items.length;
   const resolvedItems = list.items.filter(item => item.resolved).length;
   const remainingItems = totalItems - resolvedItems;
@@ -152,7 +185,7 @@ function ShoppingListCard({ list, isOwner, onSelectList, onDeleteList }) {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onDeleteList(list.id);
+              onDeleteClick(list.id, list.name);
             }}
             className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
             aria-label="Delete list"
@@ -190,83 +223,161 @@ function ShoppingListCard({ list, isOwner, onSelectList, onDeleteList }) {
   );
 }
 
-function ShoppingListGrid({ lists, onSelectList, onDeleteList, currentUserId }) {
+// Grid component for displaying shopping list tiles
+function ShoppingListGrid({ lists, onSelectList, onDeleteClick, currentUserId }) {
+  // Helper function to check if user is owner (supports both string ID and object owner)
+  const isOwner = (list) => {
+    if (typeof list.owner === 'string') {
+      return list.owner === currentUserId;
+    }
+    return list.owner?.id === currentUserId;
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {lists.map(list => (
         <ShoppingListCard
           key={list.id}
           list={list}
-          isOwner={list.owner.id === currentUserId}
+          isOwner={isOwner(list)}
           onSelectList={onSelectList}
-          onDeleteList={onDeleteList}
+          onDeleteClick={onDeleteClick}
         />
       ))}
     </div>
   );
 }
 
+// Main Shopping Lists Overview Route component
 function ShoppingListsPage({
   user,
   lists,
-  isArchivedView,
+  showAllLists,
   onCreateList,
   onOpenList,
-  onToggleArchivedView,
+  onToggleShowAll,
   onDeleteList
 }) {
   const navigate = useNavigate();
-  const [localLists, setLocalLists] = useState(INITIAL_LISTS);
-  const [localIsArchivedView, setLocalIsArchivedView] = useState(false);
+  
+  // Initialize state from localStorage or defaultLists
+  // This function is only called once during component initialization
+  const initializeLists = () => {
+    try {
+      const storedLists = localStorage.getItem('shoppingLists');
+      if (storedLists) {
+        const parsedLists = JSON.parse(storedLists);
+        // Only use stored lists if they're valid and non-empty
+        if (parsedLists && Array.isArray(parsedLists) && parsedLists.length > 0) {
+          return parsedLists;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse stored lists:', e);
+      // If there's corrupted data, remove it
+      localStorage.removeItem('shoppingLists');
+    }
+    // If no stored lists, empty array, or error, use defaults and save them
+    localStorage.setItem('shoppingLists', JSON.stringify(defaultLists));
+    return defaultLists;
+  };
+  
+  // State management using useState - initialize from localStorage
+  const [shoppingLists, setShoppingLists] = useState(initializeLists);
+  const [localShowAll, setLocalShowAll] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState({ isOpen: false, listId: null, listName: '' });
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Mark as initialized after first render
+  useEffect(() => {
+    setIsInitialized(true);
+  }, []);
+
+  // Sync state to localStorage whenever shoppingLists changes (but not on initial mount)
+  useEffect(() => {
+    if (!lists && isInitialized) { // Only sync if not controlled by props and after initialization
+      localStorage.setItem('shoppingLists', JSON.stringify(shoppingLists));
+    }
+  }, [shoppingLists, lists, isInitialized]);
 
   const currentUser = user || CURRENT_USER;
-  const currentLists = lists || localLists;
-  const currentIsArchivedView = isArchivedView !== undefined ? isArchivedView : localIsArchivedView;
+  const currentLists = lists || shoppingLists;
+  const currentShowAll = showAllLists !== undefined ? showAllLists : localShowAll;
 
-  const filteredLists = currentIsArchivedView
-    ? currentLists.filter(list => list.archived)
+  // Filter lists based on showAll state
+  // showAll = false: show only non-archived (active)
+  // showAll = true: show all including archived
+  const filteredLists = currentShowAll
+    ? currentLists
     : currentLists.filter(list => !list.archived);
 
+  // Handle creating a new shopping list
   const handleCreateList = (name) => {
     if (onCreateList) {
       onCreateList(name);
     } else {
       const newList = {
-        id: String(Date.now()),
+        id: crypto.randomUUID(),
         name: name,
-        owner: { id: currentUser.id, name: currentUser.name },
+        owner: currentUser.id,
         members: [],
         items: [],
         archived: false
       };
-      setLocalLists([...localLists, newList]);
+      const updatedLists = [...shoppingLists, newList];
+      setShoppingLists(updatedLists);
+      // Immediately save to localStorage
+      localStorage.setItem('shoppingLists', JSON.stringify(updatedLists));
     }
     setIsCreateModalOpen(false);
   };
 
+  // Handle navigation to shopping list detail route
   const handleOpenList = (listId) => {
     if (onOpenList) {
       onOpenList(listId);
     } else {
-      navigate(`/list/${listId}`);
+      navigate("/shopping-list/" + listId);
     }
   };
 
-  const handleToggleArchivedView = () => {
-    if (onToggleArchivedView) {
-      onToggleArchivedView();
+  // Handle filter toggle
+  const handleToggleShowAll = () => {
+    if (onToggleShowAll) {
+      onToggleShowAll();
     } else {
-      setLocalIsArchivedView(!localIsArchivedView);
+      setLocalShowAll(!localShowAll);
     }
   };
 
-  const handleDeleteList = (listId) => {
+  // Handle delete click - opens confirmation dialog
+  const handleDeleteClick = (listId, listName) => {
+    setDeleteConfirmation({ isOpen: true, listId, listName });
+  };
+
+  // Handle confirmed delete
+  const handleConfirmDelete = () => {
+    const { listId } = deleteConfirmation;
+    
     if (onDeleteList) {
       onDeleteList(listId);
     } else {
-      setLocalLists(localLists.filter(list => list.id !== listId));
+      const updatedLists = shoppingLists.filter(list => list.id !== listId);
+      setShoppingLists(updatedLists);
+      // Immediately save to localStorage
+      localStorage.setItem('shoppingLists', JSON.stringify(updatedLists));
     }
+    
+    setDeleteConfirmation({ isOpen: false, listId: null, listName: '' });
+  };
+
+  // Helper function to check if user is owner (supports both string ID and object owner)
+  const isOwner = (list) => {
+    if (typeof list.owner === 'string') {
+      return list.owner === currentUser.id;
+    }
+    return list.owner?.id === currentUser.id;
   };
 
   return (
@@ -278,12 +389,12 @@ function ShoppingListsPage({
             subtitle="Manage your shopping lists"
           />
           <div className="flex gap-3">
-            <ShowArchivedToggle
-              isArchivedView={currentIsArchivedView}
-              onToggle={handleToggleArchivedView}
+            <FilterToggle
+              showAll={currentShowAll}
+              onToggle={handleToggleShowAll}
             />
             <CreateListButton
-              label="Create New List"
+              label="+ Add shopping list"
               onClick={() => setIsCreateModalOpen(true)}
             />
           </div>
@@ -292,15 +403,21 @@ function ShoppingListsPage({
         <ShoppingListGrid
           lists={filteredLists}
           onSelectList={handleOpenList}
-          onDeleteList={handleDeleteList}
+          onDeleteClick={handleDeleteClick}
           currentUserId={currentUser.id}
         />
 
         <CreateListModal
           isOpen={isCreateModalOpen}
-          listName=""
           onClose={() => setIsCreateModalOpen(false)}
           onCreate={handleCreateList}
+        />
+
+        <DeleteConfirmationModal
+          isOpen={deleteConfirmation.isOpen}
+          listName={deleteConfirmation.listName}
+          onClose={() => setDeleteConfirmation({ isOpen: false, listId: null, listName: '' })}
+          onConfirm={handleConfirmDelete}
         />
       </div>
     </div>
