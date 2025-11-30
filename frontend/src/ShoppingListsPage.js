@@ -2,48 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import HeaderBar from './components/HeaderBar';
 import { Plus, Trash2, Filter } from 'lucide-react';
+import axios from 'axios';
 
-// Default shopping lists - stored as constant at route level
-const defaultLists = [
-  {
-    id: '1',
-    name: 'Weekly Groceries',
-    owner: 'user1',
-    members: [
-      { id: '2', name: 'Jane Smith' },
-      { id: '3', name: 'Bob Johnson' }
-    ],
-    items: [
-      { id: '1', name: 'Milk', resolved: false },
-      { id: '2', name: 'Bread', resolved: false },
-      { id: '3', name: 'Eggs', resolved: true }
-    ],
-    archived: false
-  },
-  {
-    id: '2',
-    name: 'Party Supplies',
-    owner: 'user1',
-    members: [
-      { id: '4', name: 'Alice Brown' }
-    ],
-    items: [
-      { id: '4', name: 'Balloons', resolved: false }
-    ],
-    archived: false
-  },
-  {
-    id: '3',
-    name: 'Old List',
-    owner: 'user1',
-    members: [],
-    items: [],
-    archived: true
-  }
-];
-
+// Align with backend seed data userId ("user-1") so created lists are visible on subsequent fetches
 const CURRENT_USER = {
-  id: 'user1',
+  id: 'user-1',
   name: 'John Doe'
 };
 
@@ -169,7 +132,7 @@ function DeleteConfirmationModal({ isOpen, listName, onClose, onConfirm }) {
 }
 
 // Shopping list tile component
-function ShoppingListCard({ list, isOwner, onSelectList, onDeleteClick }) {
+function ShoppingListCard({ list, isOwner, onSelectList, onDeleteClick, onToggleArchive }) {
   const totalItems = list.items.length;
   const resolvedItems = list.items.filter(item => item.resolved).length;
   const remainingItems = totalItems - resolvedItems;
@@ -182,16 +145,28 @@ function ShoppingListCard({ list, isOwner, onSelectList, onDeleteClick }) {
       <div className="flex items-start justify-between mb-4">
         <h3 className="text-xl font-semibold text-gray-800 flex-1">{list.name}</h3>
         {isOwner && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteClick(list.id, list.name);
-            }}
-            className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
-            aria-label="Delete list"
-          >
-            <Trash2 size={18} />
-          </button>
+          <div className="flex gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleArchive(list);
+              }}
+              className={`p-1.5 rounded transition-colors text-sm font-medium ${list.archived ? 'text-green-600 hover:bg-green-50' : 'text-gray-600 hover:bg-gray-100'}`}
+              aria-label={list.archived ? 'Unarchive list' : 'Archive list'}
+            >
+              {list.archived ? 'Unarchive' : 'Archive'}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteClick(list.id, list.name);
+              }}
+              className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors"
+              aria-label="Delete list"
+            >
+              <Trash2 size={18} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -224,7 +199,7 @@ function ShoppingListCard({ list, isOwner, onSelectList, onDeleteClick }) {
 }
 
 // Grid component for displaying shopping list tiles
-function ShoppingListGrid({ lists, onSelectList, onDeleteClick, currentUserId }) {
+function ShoppingListGrid({ lists, onSelectList, onDeleteClick, onToggleArchive, currentUserId }) {
   // Helper function to check if user is owner (supports both string ID and object owner)
   const isOwner = (list) => {
     if (typeof list.owner === 'string') {
@@ -242,6 +217,7 @@ function ShoppingListGrid({ lists, onSelectList, onDeleteClick, currentUserId })
           isOwner={isOwner(list)}
           onSelectList={onSelectList}
           onDeleteClick={onDeleteClick}
+          onToggleArchive={onToggleArchive}
         />
       ))}
     </div>
@@ -260,34 +236,31 @@ function ShoppingListsPage({
 }) {
   const navigate = useNavigate();
   
-  // Initialize state from localStorage or defaultLists
-  // This function is only called once during component initialization
-  const initializeLists = () => {
-    try {
-      const storedLists = localStorage.getItem('shoppingLists');
-      if (storedLists) {
-        const parsedLists = JSON.parse(storedLists);
-        // Only use stored lists if they're valid and non-empty
-        if (parsedLists && Array.isArray(parsedLists) && parsedLists.length > 0) {
-          return parsedLists;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to parse stored lists:', e);
-      // If there's corrupted data, remove it
-      localStorage.removeItem('shoppingLists');
-    }
-    // If no stored lists, empty array, or error, use defaults and save them
-    localStorage.setItem('shoppingLists', JSON.stringify(defaultLists));
-    return defaultLists;
-  };
-  
-  // State management using useState - initialize from localStorage
-  const [shoppingLists, setShoppingLists] = useState(initializeLists);
+  const [shoppingLists, setShoppingLists] = useState([]);
+  const [error, setError] = useState(null);
   const [localShowAll, setLocalShowAll] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState({ isOpen: false, listId: null, listName: '' });
   const [isInitialized, setIsInitialized] = useState(false);
+
+  // Fetch shopping lists from backend API
+  useEffect(() => {
+    const fetchShoppingLists = async () => {
+      try {
+        const response = await axios.get('http://localhost:4000/shoppingList/list', {
+          params: { userId: (user || CURRENT_USER).id }
+        });
+        const apiPayload = response.data;
+        const listsFromApi = Array.isArray(apiPayload?.data) ? apiPayload.data : [];
+        setShoppingLists(listsFromApi);
+      } catch (err) {
+        console.error('Fetch lists failed:', err);
+        setError('Failed to fetch shopping lists. Please try again later.');
+      }
+    };
+
+    fetchShoppingLists();
+  }, []);
 
   // Mark as initialized after first render
   useEffect(() => {
@@ -302,7 +275,7 @@ function ShoppingListsPage({
   }, [shoppingLists, lists, isInitialized]);
 
   const currentUser = user || CURRENT_USER;
-  const currentLists = lists || shoppingLists;
+  const currentLists = Array.isArray(lists) ? lists : shoppingLists;
   const currentShowAll = showAllLists !== undefined ? showAllLists : localShowAll;
 
   // Filter lists based on showAll state
@@ -310,27 +283,34 @@ function ShoppingListsPage({
   // showAll = true: show all including archived
   const filteredLists = currentShowAll
     ? currentLists
-    : currentLists.filter(list => !list.archived);
+    : Array.isArray(currentLists) ? currentLists.filter(list => !list.archived) : [];
 
   // Handle creating a new shopping list
-  const handleCreateList = (name) => {
-    if (onCreateList) {
-      onCreateList(name);
-    } else {
-      const newList = {
-        id: crypto.randomUUID(),
-        name: name,
-        owner: currentUser.id,
-        members: [],
-        items: [],
-        archived: false
-      };
-      const updatedLists = [...shoppingLists, newList];
-      setShoppingLists(updatedLists);
-      // Immediately save to localStorage
-      localStorage.setItem('shoppingLists', JSON.stringify(updatedLists));
+  const handleCreateList = async (name) => {
+    try {
+      if (onCreateList) {
+        onCreateList(name);
+      } else {
+        const response = await axios.post(
+          'http://localhost:4000/shoppingList/create',
+          { name, owner: currentUser.id },
+          { headers: { 'x-profile': 'owner' } }
+        );
+        const created = response.data?.data;
+        if (created) {
+          // Refetch lists to ensure consistent server state (in case of derived fields)
+          setShoppingLists(prev => Array.isArray(prev) ? [...prev, created] : [created]);
+        } else {
+          console.warn('Create response missing data:', response.data);
+        }
+      }
+    } catch (err) {
+      const backendMsg = err?.response?.data?.uuAppErrorMap && Object.values(err.response.data.uuAppErrorMap)[0]?.message;
+      console.error('Create list failed:', err);
+      setError(backendMsg || 'Failed to create list.');
+    } finally {
+      setIsCreateModalOpen(false);
     }
-    setIsCreateModalOpen(false);
   };
 
   // Handle navigation to shopping list detail route
@@ -357,19 +337,26 @@ function ShoppingListsPage({
   };
 
   // Handle confirmed delete
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     const { listId } = deleteConfirmation;
-    
-    if (onDeleteList) {
-      onDeleteList(listId);
-    } else {
-      const updatedLists = shoppingLists.filter(list => list.id !== listId);
-      setShoppingLists(updatedLists);
-      // Immediately save to localStorage
-      localStorage.setItem('shoppingLists', JSON.stringify(updatedLists));
+    if (!listId) return;
+    try {
+      if (onDeleteList) {
+        onDeleteList(listId);
+      } else {
+        await axios.delete('http://localhost:4000/shoppingList/delete', {
+          data: { id: listId },
+          headers: { 'x-profile': 'owner' }
+        });
+        // Remove from local state
+        setShoppingLists(prev => prev.filter(list => list.id !== listId));
+      }
+    } catch (err) {
+      console.error('Delete list failed:', err);
+      setError('Failed to delete list.');
+    } finally {
+      setDeleteConfirmation({ isOpen: false, listId: null, listName: '' });
     }
-    
-    setDeleteConfirmation({ isOpen: false, listId: null, listName: '' });
   };
 
   // Helper function to check if user is owner (supports both string ID and object owner)
@@ -378,6 +365,21 @@ function ShoppingListsPage({
       return list.owner === currentUser.id;
     }
     return list.owner?.id === currentUser.id;
+  };
+
+  const handleToggleArchive = async (list) => {
+    try {
+      const endpoint = list.archived ? 'unarchive' : 'archive';
+      await axios.put(`http://localhost:4000/shoppingList/${endpoint}`,
+        { id: list.id },
+        { headers: { 'x-profile': 'owner' } }
+      );
+      // Update local state
+      setShoppingLists(prev => prev.map(l => l.id === list.id ? { ...l, archived: !l.archived } : l));
+    } catch (err) {
+      console.error('Archive toggle failed:', err);
+      setError('Failed to toggle archive state.');
+    }
   };
 
   return (
@@ -394,16 +396,19 @@ function ShoppingListsPage({
               onToggle={handleToggleShowAll}
             />
             <CreateListButton
-              label="+ Add shopping list"
+              label="Add shopping list"
               onClick={() => setIsCreateModalOpen(true)}
             />
           </div>
         </div>
 
+        {error && <div className="error-message">{error}</div>}
+
         <ShoppingListGrid
           lists={filteredLists}
           onSelectList={handleOpenList}
           onDeleteClick={handleDeleteClick}
+          onToggleArchive={handleToggleArchive}
           currentUserId={currentUser.id}
         />
 

@@ -1,55 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Edit2 } from 'lucide-react';
+// Removed unused Edit2 import
 import HeaderBar from './components/HeaderBar';
 import MainContent from './components/MainContent';
 import MembersPanel from './components/MembersPanel';
 import ItemsPanel from './components/ItemsPanel';
 import OwnerBadge from './components/OwnerBadge';
 
-// Default shopping lists - shared with ShoppingListsPage
-// This should match the defaultLists in ShoppingListsPage.js
-const defaultLists = [
-  {
-    id: '1',
-    name: 'Weekly Groceries',
-    owner: 'user1',
-    members: [
-      { id: '2', name: 'Jane Smith' },
-      { id: '3', name: 'Bob Johnson' }
-    ],
-    items: [
-      { id: '1', name: 'Milk', resolved: false },
-      { id: '2', name: 'Bread', resolved: false },
-      { id: '3', name: 'Eggs', resolved: true }
-    ],
-    archived: false
-  },
-  {
-    id: '2',
-    name: 'Party Supplies',
-    owner: 'user1',
-    members: [
-      { id: '4', name: 'Alice Brown' }
-    ],
-    items: [
-      { id: '4', name: 'Balloons', resolved: false }
-    ],
-    archived: false
-  },
-  {
-    id: '3',
-    name: 'Old List',
-    owner: 'user1',
-    members: [],
-    items: [],
-    archived: true
-  }
-];
-
-// Current user - for demonstration
+// Current user (align with backend seed data user-1)
 const CURRENT_USER = {
-  id: 'user1',
+  id: 'user-1',
   name: 'John Doe',
   email: 'john@example.com'
 };
@@ -99,36 +60,25 @@ function ShoppingListDetail({
   const [isLoading, setIsLoading] = useState(true);
   
   // Function to load list data - memoized with useCallback
-  const loadListData = useCallback(() => {
-    if (listId || routeId) {
-      const targetId = listId || routeId;
-      
-      // Try to get from localStorage first (in case lists were updated)
-      const storedLists = localStorage.getItem('shoppingLists');
-      let allLists = defaultLists;
-      
-      if (storedLists) {
-        try {
-          const parsed = JSON.parse(storedLists);
-          if (parsed && Array.isArray(parsed) && parsed.length > 0) {
-            allLists = parsed;
-          }
-        } catch (e) {
-          console.error('Failed to parse stored lists:', e);
-        }
-      }
-      
-      // Find the list by ID
-      const foundList = allLists.find(list => list.id === targetId);
-      
-      if (foundList) {
-        const transformedList = transformListData(foundList);
-        setLocalState(transformedList);
-        setIsLoading(false);
-      } else {
-        // List not found, redirect to lists page
+  const loadListData = useCallback(async () => {
+    if (!(listId || routeId)) return;
+    const targetId = listId || routeId;
+    setIsLoading(true);
+    try {
+      const response = await axios.get('http://localhost:4000/shoppingList/get', { params: { id: targetId } });
+      const apiPayload = response.data;
+      const fetched = apiPayload?.data;
+      if (!fetched) {
         navigate('/lists');
+        return;
       }
+      // Backend already provides owner as string id; wrap like earlier logic
+      const transformedList = transformListData(fetched);
+      setLocalState(transformedList);
+      setIsLoading(false);
+    } catch (e) {
+      console.error('Failed to fetch list', e);
+      navigate('/lists');
     }
   }, [listId, routeId, navigate]);
 
@@ -154,56 +104,12 @@ function ShoppingListDetail({
   const currentItems = items || (localState?.items || []);
   const currentShowResolved = showResolved !== undefined ? showResolved : localShowResolved;
   
-  // Helper function to update stored list in localStorage
-  const updateStoredList = (updatedList) => {
-    try {
-      const storedLists = localStorage.getItem('shoppingLists');
-      let allLists = storedLists ? JSON.parse(storedLists) : defaultLists;
-      
-      const index = allLists.findIndex(list => list.id === updatedList.id);
-      
-      // Clean members array - remove isOwner and email if they exist, keep only id and name
-      const cleanedMembers = (updatedList.members || []).map(member => {
-        // Filter out the owner from members (owner is stored separately)
-        if (member.isOwner) {
-          return null; // Skip owner in members array
-        }
-        return {
-          id: member.id,
-          name: member.name
-          // Don't include email or isOwner in storage
-        };
-      }).filter(m => m !== null); // Remove null entries
-      
-      // Transform back to storage format (owner as string, preserve all properties)
-      const storageList = {
-        id: updatedList.id,
-        name: updatedList.name,
-        owner: typeof updatedList.owner === 'object' && updatedList.owner !== null 
-          ? updatedList.owner.id 
-          : updatedList.owner,
-        members: cleanedMembers,
-        items: (updatedList.items || []).map(item => ({
-          id: item.id,
-          name: item.name,
-          resolved: item.resolved !== undefined ? item.resolved : false
-        })),
-        archived: updatedList.archived !== undefined ? updatedList.archived : false
-      };
-      
-      if (index !== -1) {
-        // Update existing list
-        allLists[index] = storageList;
-      } else {
-        // Add new list if it doesn't exist
-        allLists.push(storageList);
-      }
-      
-      localStorage.setItem('shoppingLists', JSON.stringify(allLists));
-    } catch (e) {
-      console.error('Failed to update stored list:', e);
-    }
+  // Refetch list after a mutating operation to ensure consistency
+  const refreshList = async () => {
+    await loadListData();
   };
+
+  // Local-only persistence was removed; keep state updates local until backend rename/member flows are wired.
 
   // Show loading state
   if (isLoading || !localState) {
@@ -221,7 +127,6 @@ function ShoppingListDetail({
     } else {
       const updatedList = { ...localState, name: newName };
       setLocalState(updatedList);
-      updateStoredList(updatedList);
     }
     setIsEditingName(false);
   };
@@ -233,7 +138,6 @@ function ShoppingListDetail({
     } else {
       const updatedList = { ...localState, name: newName };
       setLocalState(updatedList);
-      updateStoredList(updatedList);
     }
   };
 
@@ -252,7 +156,6 @@ function ShoppingListDetail({
         members: [...localState.members, newMember]
       };
       setLocalState(updatedList);
-      updateStoredList(updatedList);
     }
   };
 
@@ -265,7 +168,6 @@ function ShoppingListDetail({
         members: localState.members.filter(m => m.id !== memberId)
       };
       setLocalState(updatedList);
-      updateStoredList(updatedList);
     }
   };
 
@@ -277,53 +179,61 @@ function ShoppingListDetail({
     }
   };
 
-  const handleAddItem = (itemName) => {
+  const handleAddItem = async (itemName) => {
     if (onAddItem) {
       onAddItem(itemName);
-    } else {
-      const newItem = {
-        id: String(Date.now()),
-        name: itemName,
-        resolved: false
-      };
-      const updatedList = {
-        ...localState,
-        items: [...localState.items, newItem]
-      };
-      setLocalState(updatedList);
-      
-      // Update localStorage to persist changes
-      updateStoredList(updatedList);
+      return;
+    }
+    if (!itemName.trim()) return;
+    try {
+      const response = await axios.post('http://localhost:4000/item/add', { name: itemName.trim(), listId: localState.id }, { headers: { 'x-profile': 'owner' } });
+      const added = response.data?.data;
+      if (added) {
+        // Append quickly then refresh list for resolved flag sync
+        setLocalState(prev => ({ ...prev, items: [...prev.items, added] }));
+        await refreshList();
+      }
+    } catch (e) {
+      console.error('Add item failed', e);
     }
   };
 
-  const handleRemoveItem = (itemId) => {
+  const handleRemoveItem = async (itemId) => {
     if (onRemoveItem) {
       onRemoveItem(itemId);
-    } else {
-      const updatedList = {
-        ...localState,
-        items: localState.items.filter(item => item.id !== itemId)
-      };
-      setLocalState(updatedList);
-      updateStoredList(updatedList);
+      return;
+    }
+    try {
+      await axios.delete('http://localhost:4000/item/remove', { data: { id: itemId }, headers: { 'x-profile': 'owner' } });
+      setLocalState(prev => ({ ...prev, items: prev.items.filter(i => i.id !== itemId) }));
+    } catch (e) {
+      console.error('Remove item failed', e);
     }
   };
 
-  const handleToggleResolved = (itemId) => {
-    // Toggle individual item resolved status
+  const handleToggleResolved = async (itemId) => {
     if (onToggleShowResolved) {
-      // If parent controls items, we need a different handler
-      // For now, handle locally
+      // parent-controlled scenario not used now
     }
-    const updatedList = {
-      ...localState,
-      items: (currentItems || localState.items).map(item =>
-        item.id === itemId ? { ...item, resolved: !item.resolved } : item
-      )
-    };
-    setLocalState(updatedList);
-    updateStoredList(updatedList);
+    // Optimistic UI toggle
+    setLocalState(prev => ({
+      ...prev,
+      items: prev.items.map(it => it.id === itemId ? { ...it, resolved: !it.resolved } : it)
+    }));
+    try {
+      const item = localState.items.find(i => i.id === itemId);
+      const endpoint = item?.resolved ? 'unresolve' : 'resolve'; // because we toggled already
+      await axios.put(`http://localhost:4000/item/${endpoint}`, { id: itemId }, { headers: { 'x-profile': 'owner' } });
+      // Refresh to ensure server truth
+      await refreshList();
+    } catch (e) {
+      console.error('Toggle resolved failed', e);
+      // revert on error
+      setLocalState(prev => ({
+        ...prev,
+        items: prev.items.map(it => it.id === itemId ? { ...it, resolved: !it.resolved } : it)
+      }));
+    }
   };
 
   const handleToggleShowResolved = () => {
@@ -340,6 +250,20 @@ function ShoppingListDetail({
       return;
     }
     navigate('/lists');
+  };
+
+  const handleArchiveToggle = async () => {
+    if (!localState) return;
+    try {
+      const endpoint = localState.archived ? 'unarchive' : 'archive';
+      await axios.put(`http://localhost:4000/shoppingList/${endpoint}`,
+        { id: localState.id },
+        { headers: { 'x-profile': 'owner' } }
+      );
+      setLocalState(prev => ({ ...prev, archived: !prev.archived }));
+    } catch (e) {
+      console.error('Archive toggle failed', e);
+    }
   };
 
   return (
@@ -375,16 +299,22 @@ function ShoppingListDetail({
               >
                 ←
               </button>
-              <h1 className="text-3xl font-bold text-gray-800 flex-1">{currentListName}</h1>
+              <h1 className={`text-3xl font-bold flex-1 ${localState.archived ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{currentListName}</h1>
               {currentIsOwner && (
                 <>
                   <OwnerBadge text="Owner" />
                   <button
+                    onClick={handleArchiveToggle}
+                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${localState.archived ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                  >
+                    {localState.archived ? 'Unarchive' : 'Archive'}
+                  </button>
+                  <button
                     onClick={() => setIsEditingName(true)}
-                    className="p-2 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                    className="px-3 py-1 text-gray-600 hover:bg-gray-100 rounded transition-colors text-sm font-medium"
                     aria-label="Edit name"
                   >
-                    <Edit2 size={24} />
+                    Rename
                   </button>
                 </>
               )}

@@ -5,20 +5,24 @@
   "license": "License Commercial",
   "dependencies": {
     "ajv": "^8.12.0",
-    "express": "^5.1.0"
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "joi": "^18.0.2",
+    "mongoose": "^9.0.0",
+    "uuid": "^13.0.0"
   },
-  "devDependencies": {},
   "engines": {
     "node": ">=16.0.0"
   },
   "scripts": {
-    "start": "node app.js",
-    "dev": "node app.js",
-    "test": "echo \"No tests configured\" && exit 0",
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "jest",
     "clean": "echo \"no clean step defined\"",
-  "build": "powershell -NoProfile -Command \"$items=@(); foreach($p in @('app','app.js','env','public','package.json','README.md')) { if(Test-Path $p){ $items += $p }}; if($items.Count -eq 0){ Write-Error 'No files to archive'; exit 1 }; if(-Not (Test-Path -Path build)){New-Item -ItemType Directory -Path build | Out-Null}; Compress-Archive -Path $items -DestinationPath 'build/server-build.zip' -Force; Write-Host 'Created build/server-build.zip'\""
+    "build": "powershell -NoProfile -Command \"$items=@(); foreach($p in @('app','app.js','env','public','package.json','README.md')) { if(Test-Path $p){ $items += $p }}; if($items.Count -eq 0){ Write-Error 'No files to archive'; exit 1 }; if(-Not (Test-Path -Path build)){New-Item -ItemType Directory -Path build | Out-Null}; Compress-Archive -Path $items -DestinationPath 'build/server-build.zip' -Force; Write-Host 'Created build/server-build.zip'\""
   },
-  "main": "app.js",
+  "main": "server.js",
   "files": [
     "app",
     "env",
@@ -26,5 +30,12 @@
   ],
   "prettier": {
     "printWidth": 120
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.5",
+    "@babel/preset-env": "^7.28.5",
+    "babel-jest": "^30.2.0",
+    "jest": "^30.2.0",
+    "supertest": "^7.1.4"
   }
 }
