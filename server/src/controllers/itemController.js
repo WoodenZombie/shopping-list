@@ -11,10 +11,27 @@ function sendServiceResult(res, result, successStatus = 200) {
 
 exports.add = async (req, res) => {
   const dtoIn = req.body;
-  const errors = validate({ name: { required: true, type: "string" }, listId: { required: true, type: "string" } }, dtoIn);
-  if (Object.keys(errors).length) return res.status(400).json({ data: dtoIn, uuAppErrorMap: errors, status: "error" });
+  const { dtoIn: normDtoIn, validationResult, isValid } = validate(
+    { name: { required: true, type: "string", min: 1, max: 255 }, listId: { required: true, type: "string" } },
+    dtoIn,
+    { allowExtraKeys: false }
+  );
+  if (!isValid) {
+    return res.status(400).json({
+      data: normDtoIn,
+      uuAppErrorMap: {
+        unsupportedKeys: validationResult.unsupportedKeyList.length ? { unsupportedKeyList: validationResult.unsupportedKeyList } : undefined,
+        invalidDtoIn: {
+          invalidTypeKeyMap: validationResult.invalidTypeKeyMap,
+          invalidValueKeyMap: validationResult.invalidValueKeyMap,
+          missingKeyMap: validationResult.missingKeyMap
+        }
+      },
+      status: "error"
+    });
+  }
   try {
-    const result = await service.add(dtoIn);
+    const result = await service.add(normDtoIn);
     return sendServiceResult(res, result, 201);
   } catch (e) {
     return res.status(500).json({ data: null, uuAppErrorMap: { add: e.message }, status: "error" });
@@ -22,10 +39,27 @@ exports.add = async (req, res) => {
 };
 
 exports.remove = async (req, res) => {
-  const { id } = req.body;
-  if (!id) return res.status(400).json({ data: null, uuAppErrorMap: { id: "is required" }, status: "error" });
+  const { validationResult, isValid } = validate(
+    { id: { required: true, type: "string" } },
+    req.body,
+    { allowExtraKeys: false }
+  );
+  if (!isValid) {
+    return res.status(400).json({
+      data: req.body,
+      uuAppErrorMap: {
+        unsupportedKeys: validationResult.unsupportedKeyList.length ? { unsupportedKeyList: validationResult.unsupportedKeyList } : undefined,
+        invalidDtoIn: {
+          invalidTypeKeyMap: validationResult.invalidTypeKeyMap,
+          invalidValueKeyMap: validationResult.invalidValueKeyMap,
+          missingKeyMap: validationResult.missingKeyMap
+        }
+      },
+      status: "error"
+    });
+  }
   try {
-    const result = await service.remove(id);
+    const result = await service.remove(req.body.id);
     return sendServiceResult(res, result);
   } catch (e) {
     return res.status(500).json({ data: null, uuAppErrorMap: { remove: e.message }, status: "error" });
@@ -33,8 +67,27 @@ exports.remove = async (req, res) => {
 };
 
 exports.update = async (req, res) => {
-  const { id } = req.body;
-  if (!id) return res.status(400).json({ data: null, uuAppErrorMap: { id: "is required" }, status: "error" });
+  const { id, name } = req.body;
+  if (!id) return res.status(400).json({ data: null, uuAppErrorMap: { invalidDtoIn: { missingKeyMap: { id: "is required" } } }, status: "error" });
+  const { validationResult, isValid } = validate(
+    { name: { type: "string", min: 1, max: 255 } },
+    { name },
+    { allowExtraKeys: false }
+  );
+  if (!isValid) {
+    return res.status(400).json({
+      data: { id, name },
+      uuAppErrorMap: {
+        unsupportedKeys: validationResult.unsupportedKeyList.length ? { unsupportedKeyList: validationResult.unsupportedKeyList } : undefined,
+        invalidDtoIn: {
+          invalidTypeKeyMap: validationResult.invalidTypeKeyMap,
+          invalidValueKeyMap: validationResult.invalidValueKeyMap,
+          missingKeyMap: validationResult.missingKeyMap
+        }
+      },
+      status: "error"
+    });
+  }
   try {
     const result = await service.update(id, req.body);
     return sendServiceResult(res, result);
@@ -44,10 +97,16 @@ exports.update = async (req, res) => {
 };
 
 exports.resolve = async (req, res) => {
-  const { id } = req.body;
-  if (!id) return res.status(400).json({ data: null, uuAppErrorMap: { id: "is required" }, status: "error" });
+  const { validationResult, isValid } = validate(
+    { id: { required: true, type: "string" } },
+    req.body,
+    { allowExtraKeys: false }
+  );
+  if (!isValid) {
+    return res.status(400).json({ data: req.body, uuAppErrorMap: { invalidDtoIn: validationResult }, status: "error" });
+  }
   try {
-    const result = await service.resolve(id);
+    const result = await service.resolve(req.body.id);
     return sendServiceResult(res, result);
   } catch (e) {
     return res.status(500).json({ data: null, uuAppErrorMap: { resolve: e.message }, status: "error" });
@@ -55,10 +114,16 @@ exports.resolve = async (req, res) => {
 };
 
 exports.unresolve = async (req, res) => {
-  const { id } = req.body;
-  if (!id) return res.status(400).json({ data: null, uuAppErrorMap: { id: "is required" }, status: "error" });
+  const { validationResult, isValid } = validate(
+    { id: { required: true, type: "string" } },
+    req.body,
+    { allowExtraKeys: false }
+  );
+  if (!isValid) {
+    return res.status(400).json({ data: req.body, uuAppErrorMap: { invalidDtoIn: validationResult }, status: "error" });
+  }
   try {
-    const result = await service.unresolve(id);
+    const result = await service.unresolve(req.body.id);
     return sendServiceResult(res, result);
   } catch (e) {
     return res.status(500).json({ data: null, uuAppErrorMap: { unresolve: e.message }, status: "error" });
@@ -66,10 +131,16 @@ exports.unresolve = async (req, res) => {
 };
 
 exports.list = async (req, res) => {
-  const { listId } = req.query;
-  if (!listId) return res.status(400).json({ data: null, uuAppErrorMap: { listId: "is required" }, status: "error" });
+  const { validationResult, isValid } = validate(
+    { listId: { required: true, type: "string" } },
+    req.query,
+    { allowExtraKeys: false }
+  );
+  if (!isValid) {
+    return res.status(400).json({ data: null, uuAppErrorMap: { invalidDtoIn: validationResult }, status: "error" });
+  }
   try {
-    const result = await service.list(listId);
+    const result = await service.list(req.query.listId);
     return sendServiceResult(res, result);
   } catch (e) {
     return res.status(500).json({ data: null, uuAppErrorMap: { list: e.message }, status: "error" });
@@ -77,10 +148,16 @@ exports.list = async (req, res) => {
 };
 
 exports.get = async (req, res) => {
-  const { id } = req.query;
-  if (!id) return res.status(400).json({ data: null, uuAppErrorMap: { id: "is required" }, status: "error" });
+  const { validationResult, isValid } = validate(
+    { id: { required: true, type: "string" } },
+    req.query,
+    { allowExtraKeys: false }
+  );
+  if (!isValid) {
+    return res.status(400).json({ data: null, uuAppErrorMap: { invalidDtoIn: validationResult }, status: "error" });
+  }
   try {
-    const result = await service.get(id);
+    const result = await service.get(req.query.id);
     return sendServiceResult(res, result);
   } catch (e) {
     return res.status(500).json({ data: null, uuAppErrorMap: { get: e.message }, status: "error" });

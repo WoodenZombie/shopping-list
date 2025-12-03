@@ -23,10 +23,27 @@ function toDto(doc) {
 
 exports.create = async (req, res, next) => {
   const dtoIn = req.body;
-  const errors = validate({ name: { required: true, type: "string" }, owner: { required: true, type: "string" } }, dtoIn);
-  if (Object.keys(errors).length) return res.status(400).json({ data: dtoIn, uuAppErrorMap: errors, status: "error" });
+  const { dtoIn: normDtoIn, validationResult, isValid } = validate(
+    { name: { required: true, type: "string", min: 1, max: 255 }, owner: { required: true, type: "string" } },
+    dtoIn,
+    { allowExtraKeys: false }
+  );
+  if (!isValid) {
+    return res.status(400).json({
+      data: normDtoIn,
+      uuAppErrorMap: {
+        unsupportedKeys: validationResult.unsupportedKeyList.length ? { unsupportedKeyList: validationResult.unsupportedKeyList } : undefined,
+        invalidDtoIn: {
+          invalidTypeKeyMap: validationResult.invalidTypeKeyMap,
+          invalidValueKeyMap: validationResult.invalidValueKeyMap,
+          missingKeyMap: validationResult.missingKeyMap
+        }
+      },
+      status: "error"
+    });
+  }
   try {
-    const data = await service.create(dtoIn);
+    const data = await service.create(normDtoIn);
     res.json({ data: toDto(data), uuAppErrorMap: {}, status: "success" });
   } catch (e) {
     next(e);
@@ -34,30 +51,78 @@ exports.create = async (req, res, next) => {
 };
 
 exports.list = async (req, res, next) => {
-  const userId = req.query.userId || "user-1";
+  // Validate query keys and apply default
+  const query = { userId: req.query.userId };
+  const { dtoIn: normQuery, validationResult } = validate(
+    { userId: { type: "string", default: "user-1" } },
+    query,
+    { allowExtraKeys: false }
+  );
   try {
-    const data = await service.list(userId);
-    res.json({ data: data.map(toDto), uuAppErrorMap: {}, status: "success" });
+    const data = await service.list(normQuery.userId);
+    const uuMap = {};
+    if (validationResult.unsupportedKeyList.length) {
+      uuMap.unsupportedKeys = { unsupportedKeyList: validationResult.unsupportedKeyList };
+    }
+    res.json({ data: data.map(toDto), uuAppErrorMap: uuMap, status: "success" });
   } catch (e) {
     next(e);
   }
 };
 
 exports.get = async (req, res, next) => {
-  const { id } = req.query;
-  if (!id) return res.status(400).json({ data: null, uuAppErrorMap: { id: "is required" }, status: "error" });
+  const query = { id: req.query.id };
+  const { validationResult, isValid } = validate(
+    { id: { required: true, type: "string" } },
+    query,
+    { allowExtraKeys: false }
+  );
+  if (!isValid) {
+    return res.status(400).json({
+      data: null,
+      uuAppErrorMap: {
+        unsupportedKeys: validationResult.unsupportedKeyList.length ? { unsupportedKeyList: validationResult.unsupportedKeyList } : undefined,
+        invalidDtoIn: {
+          invalidTypeKeyMap: validationResult.invalidTypeKeyMap,
+          invalidValueKeyMap: validationResult.invalidValueKeyMap,
+          missingKeyMap: validationResult.missingKeyMap
+        }
+      },
+      status: "error"
+    });
+  }
   try {
-    const data = await service.get(id);
-    if (!data) return res.status(404).json({ data: null, uuAppErrorMap: { notFound: "List not found" }, status: "error" });
+    const data = await service.get(query.id);
+    if (!data) return res.status(404).json({ data: null, uuAppErrorMap: { invalidDtoIn: { invalidValueKeyMap: { id: "List not found" } } }, status: "error" });
     res.json({ data: toDto(data), uuAppErrorMap: {}, status: "success" });
   } catch (e) { next(e); }
 };
 
 exports.update = async (req, res, next) => {
-  const { id } = req.body;
-  if (!id) return res.status(400).json({ data: null, uuAppErrorMap: { id: "is required" }, status: "error" });
+  const { id, name, archived } = req.body;
+  if (!id) return res.status(400).json({ data: null, uuAppErrorMap: { invalidDtoIn: { missingKeyMap: { id: "is required" } } }, status: "error" });
+  const { validationResult, isValid } = validate(
+    { name: { type: "string", min: 1, max: 255 }, archived: { type: "boolean" } },
+    { name, archived },
+    { allowExtraKeys: false }
+  );
+  if (!isValid) {
+    return res.status(400).json({
+      data: { id, name, archived },
+      uuAppErrorMap: {
+        unsupportedKeys: validationResult.unsupportedKeyList.length ? { unsupportedKeyList: validationResult.unsupportedKeyList } : undefined,
+        invalidDtoIn: {
+          invalidTypeKeyMap: validationResult.invalidTypeKeyMap,
+          invalidValueKeyMap: validationResult.invalidValueKeyMap,
+          missingKeyMap: validationResult.missingKeyMap
+        }
+      },
+      status: "error"
+    });
+  }
   try {
     const data = await service.update(id, req.body);
+    if (!data) return res.status(404).json({ data: null, uuAppErrorMap: { invalidDtoIn: { invalidValueKeyMap: { id: "List not found" } } }, status: "error" });
     res.json({ data: toDto(data), uuAppErrorMap: {}, status: "success" });
   } catch (e) { next(e); }
 };
@@ -82,9 +147,10 @@ exports.unarchive = async (req, res, next) => {
 
 exports.delete = async (req, res, next) => {
   const { id } = req.body;
-  if (!id) return res.status(400).json({ data: null, uuAppErrorMap: { id: "is required" }, status: "error" });
+  if (!id) return res.status(400).json({ data: null, uuAppErrorMap: { invalidDtoIn: { missingKeyMap: { id: "is required" } } }, status: "error" });
   try {
-    await service.delete(id);
+    const deleted = await service.delete(id);
+    if (!deleted) return res.status(404).json({ data: null, uuAppErrorMap: { invalidDtoIn: { invalidValueKeyMap: { id: "List not found" } } }, status: "error" });
     res.json({ data: { id }, uuAppErrorMap: {}, status: "success" });
   } catch (e) { next(e); }
 };

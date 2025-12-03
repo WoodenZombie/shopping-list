@@ -16,11 +16,8 @@ dist/
 dist-node/
 dist-esm/
 node_modules/
-public/
-target/
 doc/
 out/
-build/
 metamodel_*.zip
 npm-debug.log
 pnpm-debug.log

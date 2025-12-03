@@ -21,15 +21,22 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 4000;
 const useMock = process.env.USE_MOCK === 'true';
+const isTest = process.env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
 
 if (useMock) {
   console.log('[server] Starting in MOCK mode (no Mongo connection).');
-  app.listen(PORT, () => console.log(`Mock server running on port ${PORT}`));
+  if (!isTest) {
+    app.listen(PORT, () => console.log(`Mock server running on port ${PORT}`));
+  }
 } else {
   // Connect to MongoDB and start the server
-  connectDB().then(() => {
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-  });
+  const start = async () => {
+    await connectDB();
+    if (!isTest) {
+      app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    }
+  };
+  start();
 }
 
 // Export app for testing (Supertest) and tooling
