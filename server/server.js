@@ -11,7 +11,7 @@ const app = express();
 
 // Update CORS to allow your specific frontend
 app.use(cors({
-    origin: ["https://shopping-list-lh7e.vercel.app", "http://localhost:3000"],
+    origin: ["https://shopping-list-lyart-five.vercel.app", "http://localhost:3000"],
     credentials: true
 }));
 
