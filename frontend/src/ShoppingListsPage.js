@@ -10,6 +10,53 @@ const CURRENT_USER = {
   name: 'John Doe'
 };
 
+// Offline fallback mock data used when backend is unavailable
+const MOCK_DATA = [
+  {
+    id: 'list-001',
+    name: 'Weekly Groceries',
+    owner: { id: 'user-1', name: 'John Doe' },
+    archived: false,
+    members: [
+      { id: 'member-1', userId: 'user-1', name: 'John Doe', role: 'owner' },
+      { id: 'member-2', userId: 'user-2', name: 'Jane Smith', role: 'member' }
+    ],
+    items: [
+      { id: 'item-1', name: 'Milk', resolved: false },
+      { id: 'item-2', name: 'Bread', resolved: true },
+      { id: 'item-3', name: 'Eggs', resolved: false }
+    ]
+  },
+  {
+    id: 'list-002',
+    name: 'Party Supplies',
+    owner: { id: 'user-1', name: 'John Doe' },
+    archived: false,
+    members: [
+      { id: 'member-3', userId: 'user-1', name: 'John Doe', role: 'owner' }
+    ],
+    items: [
+      { id: 'item-4', name: 'Chips', resolved: true },
+      { id: 'item-5', name: 'Soda', resolved: false },
+      { id: 'item-6', name: 'Plastic Cups', resolved: false }
+    ]
+  },
+  {
+    id: 'list-003',
+    name: 'Home Improvement',
+    owner: { id: 'user-1', name: 'John Doe' },
+    archived: true,
+    members: [
+      { id: 'member-4', userId: 'user-1', name: 'John Doe', role: 'owner' }
+    ],
+    items: [
+      { id: 'item-7', name: 'Paint', resolved: true },
+      { id: 'item-8', name: 'Brushes', resolved: true },
+      { id: 'item-9', name: 'Drop Cloth', resolved: false }
+    ]
+  }
+];
+
 // Filter component - Show only active vs Show all
 function FilterToggle({ showAll, onToggle }) {
   return (
@@ -255,7 +302,9 @@ function ShoppingListsPage({
         setShoppingLists(listsFromApi);
       } catch (err) {
         console.error('Fetch lists failed:', err);
-        setError('Failed to fetch shopping lists. Please try again later.');
+        // Offline fallback: use mock data when backend is unavailable
+        setShoppingLists(MOCK_DATA);
+        setError('Backend unavailable, using offline mock data');
       }
     };
 
