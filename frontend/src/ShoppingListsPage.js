@@ -247,7 +247,7 @@ function ShoppingListsPage({
   useEffect(() => {
     const fetchShoppingLists = async () => {
       try {
-        const response = await axios.get('http://localhost:4000/shoppingList/list', {
+        const response = await axios.get('/shoppingList/list', {
           params: { userId: (user || CURRENT_USER).id }
         });
         const apiPayload = response.data;
@@ -292,7 +292,7 @@ function ShoppingListsPage({
         onCreateList(name);
       } else {
         const response = await axios.post(
-          'http://localhost:4000/shoppingList/create',
+          '/shoppingList/create',
           { name, owner: currentUser.id },
           { headers: { 'x-profile': 'owner' } }
         );
@@ -344,7 +344,7 @@ function ShoppingListsPage({
       if (onDeleteList) {
         onDeleteList(listId);
       } else {
-        await axios.delete('http://localhost:4000/shoppingList/delete', {
+        await axios.delete('/shoppingList/delete', {
           data: { id: listId },
           headers: { 'x-profile': 'owner' }
         });
@@ -370,7 +370,7 @@ function ShoppingListsPage({
   const handleToggleArchive = async (list) => {
     try {
       const endpoint = list.archived ? 'unarchive' : 'archive';
-      await axios.put(`http://localhost:4000/shoppingList/${endpoint}`,
+      await axios.put(`/shoppingList/${endpoint}`,
         { id: list.id },
         { headers: { 'x-profile': 'owner' } }
       );

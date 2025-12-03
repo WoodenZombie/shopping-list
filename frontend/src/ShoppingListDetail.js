@@ -65,7 +65,7 @@ function ShoppingListDetail({
     const targetId = listId || routeId;
     setIsLoading(true);
     try {
-      const response = await axios.get('http://localhost:4000/shoppingList/get', { params: { id: targetId } });
+  const response = await axios.get('/shoppingList/get', { params: { id: targetId } });
       const apiPayload = response.data;
       const fetched = apiPayload?.data;
       if (!fetched) {
@@ -186,7 +186,7 @@ function ShoppingListDetail({
     }
     if (!itemName.trim()) return;
     try {
-      const response = await axios.post('http://localhost:4000/item/add', { name: itemName.trim(), listId: localState.id }, { headers: { 'x-profile': 'owner' } });
+  const response = await axios.post('/item/add', { name: itemName.trim(), listId: localState.id }, { headers: { 'x-profile': 'owner' } });
       const added = response.data?.data;
       if (added) {
         // Append quickly then refresh list for resolved flag sync
@@ -204,7 +204,7 @@ function ShoppingListDetail({
       return;
     }
     try {
-      await axios.delete('http://localhost:4000/item/remove', { data: { id: itemId }, headers: { 'x-profile': 'owner' } });
+  await axios.delete('/item/remove', { data: { id: itemId }, headers: { 'x-profile': 'owner' } });
       setLocalState(prev => ({ ...prev, items: prev.items.filter(i => i.id !== itemId) }));
     } catch (e) {
       console.error('Remove item failed', e);
@@ -223,7 +223,7 @@ function ShoppingListDetail({
     try {
       const item = localState.items.find(i => i.id === itemId);
       const endpoint = item?.resolved ? 'unresolve' : 'resolve'; // because we toggled already
-      await axios.put(`http://localhost:4000/item/${endpoint}`, { id: itemId }, { headers: { 'x-profile': 'owner' } });
+  await axios.put(`/item/${endpoint}`, { id: itemId }, { headers: { 'x-profile': 'owner' } });
       // Refresh to ensure server truth
       await refreshList();
     } catch (e) {
@@ -256,7 +256,7 @@ function ShoppingListDetail({
     if (!localState) return;
     try {
       const endpoint = localState.archived ? 'unarchive' : 'archive';
-      await axios.put(`http://localhost:4000/shoppingList/${endpoint}`,
+      await axios.put(`/shoppingList/${endpoint}`,
         { id: localState.id },
         { headers: { 'x-profile': 'owner' } }
       );
