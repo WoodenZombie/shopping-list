@@ -5,6 +5,7 @@
   "license": "License Commercial",
   "dependencies": {
     "ajv": "^8.12.0",
+    "archiver": "^7.0.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
@@ -20,7 +21,7 @@
     "dev": "node server.js",
     "test": "jest",
     "clean": "echo \"no clean step defined\"",
-    "build": "powershell -NoProfile -Command \"$items=@(); foreach($p in @('app','app.js','env','public','package.json','README.md')) { if(Test-Path $p){ $items += $p }}; if($items.Count -eq 0){ Write-Error 'No files to archive'; exit 1 }; if(-Not (Test-Path -Path build)){New-Item -ItemType Directory -Path build | Out-Null}; Compress-Archive -Path $items -DestinationPath 'build/server-build.zip' -Force; Write-Host 'Created build/server-build.zip'\""
+    "build": "node build-zip.js"
   },
   "main": "server.js",
   "files": [

@@ -19,6 +19,18 @@ app.use('/item', itemRoutes);
 // Error handler
 app.use(errorHandler);
 
+// Serve frontend build in production
+if (process.env.NODE_ENV === 'production') {
+  const path = require('path');
+  const buildPath = path.join(__dirname, '../frontend/build');
+  app.use(express.static(buildPath));
+
+  // Fallback to index.html for client-side routing
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(buildPath, 'index.html'));
+  });
+}
+
 const PORT = process.env.PORT || 4000;
 const useMock = process.env.USE_MOCK === 'true';
 const isTest = process.env.NODE_ENV === 'test' || !!process.env.JEST_WORKER_ID;
